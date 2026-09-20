@@ -1,0 +1,72 @@
+seed: 42
+device: auto
+
+# ---------- 数据 ----------
+data:
+  csv_path: ../data/raw.csv          # 建议由 build_dataset.py 合成; 不存在时用合成 demo
+  n_channels: 24
+  seq_len: 1000                      # 10s * 100Hz = 1000 采样点
+  cols:
+    id: sample_id
+    label_bin: label_hypertension
+    label_grade: bp_grade
+    label_syndrome: tcm_syndrome
+    meta: [age, sex, sbp, dbp, bmi]
+    wave_prefix: wave_
+    # hand_feats: null -> loader 自动收集除 id/标签/元数据/wave 之外的所有数值列
+    # 也可以填明确列表来锁定特征子集
+    hand_feats: null
+
+# ---------- Excel → 波形 CSV ----------
+ingest:
+  raw_dir: ../data/raw_xlsx
+  labels:  ../data/labels.xlsx
+  fs: 100
+  segment_sec: 10.0
+  step_sec: 10.0
+  signal_col: auto
+  signal_col_index: -1
+
+# ---------- Excel → 特征 CSV ----------
+ingest_features:
+  time_dir: ../data/time_xlsx
+  freq_dir: ../data/freq_xlsx
+  apv_dir:  ../data/apv_xlsx
+  # best_channel: 按论文思路选"最佳通道"; mean_all: 24 通道均值; per_channel: 24 通道拼接
+  time_strategy: best_channel
+  freq_strategy: best_channel
+
+train:
+  batch_size: 16
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  epochs_ssl: 100
+  epochs_ft: 80
+  warmup_epochs: 5
+  num_workers: 0
+  early_stop_patience: 15
+
+cv:
+  n_folds: 5
+  stratified: true
+  test_ratio: 0.15
+
+imbalance:
+  strategy: class_weight
+  focal_gamma: 2.0
+
+model:
+  encoder: resnet1d
+  hidden_dim: 128
+  depth: 6
+  dropout: 0.2
+  mae_mask_ratio: 0.5
+  mae_patch_len: 25
+  fusion_mlp_hidden: 128
+  fusion_mlp_layers: 2
+
+output:
+  root: ../outputs
+  models: ../outputs/models
+  logs: ../outputs/logs
+  figures: ../outputs/figures
