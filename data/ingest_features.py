@@ -57,7 +57,18 @@ FREQ_COLS = ["ApEn","E","TSEn","MSF","RMSF",
              "频谱峰值_幅度_4","频谱峰值_幅度_5"]
 
 
-def _sid_from_path(p): return os.path.splitext(os.path.basename(p))[0]
+_SID_PREFIXES = (
+    "24_Tfeature_fiter_24_",
+    "24_Ffeature_fiter_24_",
+    "24_APVfeature_fiter_24_",
+)
+
+def _sid_from_path(p):
+    stem = os.path.splitext(os.path.basename(p))[0]
+    for pref in _SID_PREFIXES:
+        if stem.startswith(pref):
+            return stem[len(pref):]
+    return stem
 
 
 # ---------------- 时域 ----------------
@@ -107,6 +118,16 @@ def _freq_one_subject(path, strategy="best_channel"):
         df = df.copy()
         df["name"] = np.arange(1, len(df)+1)
         name_col = "name"
+    # 列名兼容: 表头可能带中文前缀 (如 "近似熵ApEn", "信号的总能量E"),
+    # 或直接就是 FREQ_COLS 中的英文短名. 建立一个 rename 映射.
+    rename = {}
+    for col in df.columns:
+        cs = str(col)
+        for tgt in FREQ_COLS:
+            if cs == tgt or cs.endswith(tgt):
+                rename[col] = tgt
+                break
+    df = df.rename(columns=rename)
     # 数值列
     for c in FREQ_COLS:
         if c not in df.columns: df[c] = np.nan
@@ -134,14 +155,22 @@ def _apv_one_subject(path):
     df = pd.read_excel(path, sheet_name=0)
     if len(df) == 0:
         return {}
-    row = df.iloc[0].copy()
-    # 强制数值化, 加前缀
+    dfv = df.apply(pd.to_numeric, errors="coerce")
+    # 部分 APV 表首行是全零占位, 真实数据从后续行起. 跳掉全零行再求均值.
+    nz_mask = (dfv.fillna(0) != 0).any(axis=1)
+    if nz_mask.any():
+        row = dfv.loc[nz_mask].mean(axis=0, skipna=True)
+    else:
+        row = dfv.iloc[0]
     out = {}
     for k, v in row.items():
         try:
-            out[f"apv_{k}"] = float(v)
+            fv = float(v)
         except Exception:
-            pass
+            continue
+        if fv != fv:  # NaN
+            continue
+        out[f"apv_{k}"] = fv
     return out
 
 
